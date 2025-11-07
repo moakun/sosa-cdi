@@ -12,91 +12,50 @@ export default function Attestation() {
   const { data: session } = useSession();
   const [isGenerating, setIsGenerating] = useState(false);
   const certificateRef = useRef<HTMLDivElement>(null);
+  const hiddenCertificateRef = useRef<HTMLDivElement>(null);
 
   const downloadCertificate = async () => {
-    if (!certificateRef.current || !session?.user?.email) return;
+    if (!hiddenCertificateRef.current || !session?.user?.email) return;
 
     setIsGenerating(true);
     try {
-      // Generate certificate image with optimized settings
-      const canvas = await html2canvas(certificateRef.current, {
-        scale: 2,
+      // Use the hidden, fixed-size certificate for generation
+      const element = hiddenCertificateRef.current;
+      
+      const canvas = await html2canvas(element, {
+        scale: 3, // Higher scale for better quality
         logging: false,
         useCORS: true,
         backgroundColor: "#ffffff",
-        // Remove fixed width/height to capture actual element size
-        allowTaint: true,
-        removeContainer: true,
-        imageTimeout: 15000,
-        // Ensure we capture the full element
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
-        foreignObjectRendering: false
+        width: 800,
+        height: 600,
+        windowWidth: 800,
+        windowHeight: 600,
       });
 
-      // Method 1: Optimized PNG with compression
-      const imgData = canvas.toDataURL("image/png", 0.8); // 80% quality
-      
-      // Method 2: Alternative - Use JPEG for smaller size (if quality is acceptable)
-      // const imgData = canvas.toDataURL("image/jpeg", 0.85); // 85% quality JPEG
+      const imgData = canvas.toDataURL("image/png", 0.95);
 
-      // Create PDF with optimized settings
       const pdf = new jsPDF({
         orientation: "landscape",
-        unit: "mm",
-        format: "a4",
-        compress: true // Enable PDF compression
+        unit: "px",
+        format: [800, 600],
+        compress: true,
       });
 
-      // Calculate dimensions to fit the entire certificate with proper margins
-      const pdfWidth = pdf.internal.pageSize.getWidth(); // 297mm for A4 landscape
-      const pdfHeight = pdf.internal.pageSize.getHeight(); // 210mm for A4 landscape
-      
-      // Add margins (10mm on each side)
-      const margin = 10;
-      const availableWidth = pdfWidth - (2 * margin);
-      const availableHeight = pdfHeight - (2 * margin);
-      
-      // Calculate aspect ratios
-      const canvasRatio = canvas.width / canvas.height;
-      const availableRatio = availableWidth / availableHeight;
-      
-      let imgWidth, imgHeight, x, y;
-      
-      if (canvasRatio > availableRatio) {
-        // Canvas is wider than available space - fit to width
-        imgWidth = availableWidth;
-        imgHeight = availableWidth / canvasRatio;
-        x = margin;
-        y = margin + (availableHeight - imgHeight) / 2; // Center vertically
-      } else {
-        // Canvas is taller than available space - fit to height
-        imgHeight = availableHeight;
-        imgWidth = availableHeight * canvasRatio;
-        x = margin + (availableWidth - imgWidth) / 2; // Center horizontally
-        y = margin;
-      }
-
-      pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight, undefined, 'FAST');
-      
-      // Save with compression
+      pdf.addImage(imgData, "PNG", 0, 0, 800, 600, undefined, "FAST");
       pdf.save("certificat.pdf");
 
-      // Update attestation status
       const response = await fetch("/api/certinfo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: session.user.email
+          email: session.user.email,
         }),
       });
 
       if (!response.ok) {
         throw new Error("Échec de la mise à jour dans la base de données");
       }
-
     } catch (error) {
       console.error("Erreur:", error);
     } finally {
@@ -126,9 +85,10 @@ export default function Attestation() {
           </Button>
         </div>
 
+        {/* Visible certificate - responsive */}
         <div className="border rounded-lg overflow-hidden shadow-lg">
           <div className="overflow-auto">
-            <div ref={certificateRef}>
+            <div ref={certificateRef} className="min-w-[800px]">
               <Certificate
                 userName={session.user?.fullName || "Participant"}
                 company={session.user?.companyName || "Entreprise"}
@@ -136,6 +96,18 @@ export default function Attestation() {
                 courseName="Formation Anti-corruption"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Hidden certificate - fixed size for PDF generation */}
+        <div className="fixed -left-[9999px] top-0">
+          <div ref={hiddenCertificateRef}>
+            <Certificate
+              userName={session.user?.fullName || "Participant"}
+              company={session.user?.companyName || "Entreprise"}
+              date={new Date()}
+              courseName="Formation Anti-corruption"
+            />
           </div>
         </div>
       </div>
